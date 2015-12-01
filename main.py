@@ -100,7 +100,7 @@ class Experiment:
                     continue
                 else:
                     break
-            if dist_point < count_frags_ref * 3 * self.sigma / math.sqrt(self.n):
+            if dist_point < math.sqrt(count_frags_ref) * 3 * self.sigma:
                 return True
         return False
 
@@ -130,27 +130,26 @@ class Experiment:
                self.test_border(mp.map2, mp.map1)
 
 
-# exp = Experiment(25, 1.8, 0.6, 2)
 # print(exp.run())
 
-f = open('analyze_gap.txt', 'w')
+# f = open('analyze_gap.txt', 'w')
+#
+# N = 500
+# for isigma in range(1,10):
+#     sigma = isigma * 0.2
+#     for ipc in range(1, 11):
+#         pc = 0.5 + ipc * 0.05
+#         for gap in range(0, 7):
+#             exp = Experiment(25, sigma, pc, gap)
+#             errors = 0
+#             for _ in range(N):
+#                 errors += exp.run()
+#             print("{} {} {} {}".format(sigma, pc, gap, errors / N))
+#             print("{} {} {} {}".format(sigma, pc, gap, errors / N), file=f)
+# f.close()
 
-N = 500
-for isigma in range(1,10):
-    sigma = isigma * 0.2
-    for ipc in range(1, 11):
-        pc = 0.5 + ipc * 0.05
-        for gap in range(0, 7):
-            exp = Experiment(25, sigma, pc, gap)
-            errors = 0
-            for _ in range(N):
-                errors += exp.run()
-            print("{} {} {} {}".format(sigma, pc, gap, errors / N))
-            print("{} {} {} {}".format(sigma, pc, gap, errors / N), file=f)
-f.close()
 
-
-
-# map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
-# map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
-# print(exp.test_border(map1, map2))
+exp = Experiment(25, 1.8, 0.6, 2)
+map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
+map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
+print(exp.test_border(map1, map2))
