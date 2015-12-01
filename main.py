@@ -43,7 +43,8 @@ class Map:
     def __init__(self, cuts, ids):
         self.cuts = cuts
         self.ids = ids
-        self.num_ids = {id: i for i, id in enumerate(ids)}
+        self.id_nums = {id: i for i, id in enumerate(ids)}
+        self.num_ids = {i: id for i, id in enumerate(ids)}
 
     def __str__(self):
         return "Frags: {}\nids: {}".format(list(map(round, self.cuts)), self.ids)
@@ -89,23 +90,26 @@ class MapManager:
 
 
 class Experiment:
-    def __init__(self, n, sigma, pc, gap):
+    def __init__(self, n, sigma, pc, gap_frags, gap_kb):
         self.sigma = sigma
-        self.gap = gap
+        self.gap_frags = gap_frags
+        self.gap_kb = gap_kb
         self.pc = pc
         self.n = n
 
     def get_pairs_in_frags(self, map1, map2):
-        id2 = 0
-        pairs = []
-        for id1 in map1.ids[self.gap:]:
+        num_id2 = 0
+        pairs = {}
+        for id1 in map1.ids[self.gap_frags:]:
             # print(map2.ids[id2], id1)
-            pairs.append((map2.ids[id2], id1))
-            id2 += 1
+            if num_id2 not in map2.num_ids:
+                break
+            pairs[map2.num_ids[num_id2]] = id1
+            num_id2 += 1
         return pairs
 
     def get_pairs_in_kb(self, map1, map2, pairs):
-        return [(map2.cuts[map2.num_ids[p2]], map1.cuts[map1.num_ids[p1]]) for p2, p1 in pairs]
+        return [(map2.cuts[map2.id_nums[p2]], map1.cuts[map1.id_nums[p1]]) for p2, p1 in pairs]
 
     def calc_distances(self, pairs):
         return [math.fabs(x - y) / math.sqrt(2) for x, y in pairs]
@@ -130,28 +134,30 @@ class Experiment:
         # Проекцируем на ось, находим расстояние и отображаем ось х или у => ((x+y) / 2, (x+y) / 2) => d = (x+y)/sqrt(2) => отображение на sqrt(2) / 2 => имеем (x + y)/2
         return [(x + y) / 2 for x, y in pairs]
 
-    def test_border(self, map1, map2):
+    def test_border_frags(self, map1, map2):
         # Build pairs of border points
+
+        alignment_ids = sorted(list(set(map1.ids) & set(map2.ids)))
         pairs_cuts = self.get_pairs_in_frags(map1, map2)
 
-        # print(self.get_pairs_in_kb(map1, map2, left_pairs))
-        # Recalc pairs in frags to pairs in kb
-        # reference_dist = [i for i in range(15)]
-        pairs_kb = self.get_pairs_in_kb(map1, map2, pairs_cuts)
-        for i in range(len(pairs_cuts)):
-            x, y = pairs_cuts[i]
-            xcor = map2.num_ids[x]
-            ycor = map1.num_ids[y]
-            # print((xcor, y, pairs_kb[xcor][0], map1.cuts[map1.num_ids[y]]))
-            if pairs_kb[xcor][0] > reference_dist[ycor] + math.sqrt(ycor) * self.sigma:
+        for align_id in alignment_ids:
+            if pairs_cuts.get(align_id, 10**10) < align_id:
                 return True
         return False
 
-    def run(self):
+    def run_frags(self):
         mp = MapManager(self.n, self.sigma, self.pc)
-        return self.test_border(mp.map1, mp.map2) and \
-               self.test_border(mp.map2, mp.map1)
+        return self.test_border_frags(mp.map1, mp.map2) and \
+               self.test_border_frags(mp.map2, mp.map1)
 
+    def test_border_kb(self, map1, map2):
+        alignment_ids = sorted(list(set(map1.ids) & set(map2.ids)))
+
+
+    def run_kb(self):
+        mp = MapManager(self.n, self.sigma, self.pc)
+        return self.test_border_kb(mp.map1, mp.map2) and \
+               self.test_border_kb(mp.map2, mp.map1)
 
 # print(exp.run())
 
@@ -159,21 +165,21 @@ f = open('analyze_gap.txt', 'w')
 
 pool = ThreadPool()
 
-def calc_to_gap(gap):
+def calc_to_gap(gap_frags, gap_kb):
     result = []
-    N = 1000
+    N = 2000
     for isigma in range(1, 10):
         sigma = isigma * 0.2
         for ipc in range(0, 8):
             pc = 0.6 + ipc * 0.05
 
-            exp = Experiment(25, sigma, pc, gap)
+            exp = Experiment(25, sigma, pc, gap_frags)
             errors = 0
             for _ in range(N):
-                errors += exp.run()
+                errors += exp.run_frags()
 
-            print("{} {} {} {}".format(sigma, pc, gap, errors / N))
-            result.append("{} {} {} {}".format(sigma, pc, gap, errors / N))
+            print("{} {} {} {}".format(sigma, pc, gap_frags, errors / N))
+            result.append("{} {} {} {}".format(sigma, pc, gap_frags, errors / N))
     return result
 
 
@@ -189,14 +195,14 @@ def calc_to_gap(gap):
 #                 errors += exp.run()
 #             print("{} {} {} {}".format(sigma, pc, gap, errors / N))
 #             print("{} {} {} {}".format(sigma, pc, gap, errors / N), file=f)
-f.close()
+# f.close()
 
 #
-# exp = Experiment(25, 1.8, 0.6, 2)
-# map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
-# map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
-# print(exp.test_border(map1, map2))
-# print(exp.test_border(map2, map1))
+exp = Experiment(25, 1.8, 0.6, 0)
+map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
+map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
+print(exp.test_border_frags(map1, map2))
+print(exp.test_border_frags(map2, map1))
 
 # ref_sum = 0
 # res = []
@@ -204,15 +210,15 @@ f.close()
 #     ref_sum += r
 #     res.append(round(ref_sum, 3))
 # print(res)
-
-pool = ThreadPool(4)
-gaps = [1, 2, 3, 4]
-results = pool.map(calc_to_gap, gaps)
-
-pool.close()
-pool.join()
-f = open('analyze_gap.txt', 'w')
-for output in results:
-    for r in output:
-        print(r, file=f)
-f.close()
+#
+# pool = ThreadPool(4)
+# gaps_frags = [1, 2, 3, 4]
+# results = pool.map(calc_to_gap, gaps_frags)
+#
+# pool.close()
+# pool.join()
+# f = open('analyze_gap.txt', 'w')
+# for output in results:
+#     for r in output:
+#         print(r, file=f)
+# f.close()
