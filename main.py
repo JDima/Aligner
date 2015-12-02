@@ -1,8 +1,7 @@
 __author__ = 'JDima'
-import random
-from numpy import random
 import math
-from functools import partial
+import abc
+from numpy import random
 from multiprocessing.dummy import Pool as ThreadPool
 
 reference_frags = [23.077, 2.770, 1.506, 27.417, 3.242, 7.507, 6.510, 17.395, 1.282, 10.298, 18.440, 16.291, 1.297,
@@ -38,6 +37,32 @@ reference_dist = [0, 23.077, 25.847, 27.353, 54.77, 58.012, 65.519, 72.029, 89.4
                   1644.738, 1657.042, 1688.253, 1694.901, 1754.764, 1778.158, 1778.55, 1781.999, 1785.18, 1821.612,
                   1824.307]
 
+# class BinarySearch:
+#
+#     def __init__(self, task):
+#         self.task = task
+#
+#     def binarySearch(self, left, right):
+#         if right < left:
+#             return self.NOT_FOUND
+#
+#         mid = (left + right) / 2
+#         task_result = self.task(mid)
+#         if task_result > 0:
+#             return self.binarySearch(arr, searchValue, mid + 1, right)
+#         elif task_result < 0:
+#             return self.binarySearch(arr, searchValue, left, mid - 1)
+#         else:
+#             return mid
+#
+#     def search(self, left, right, ):
+#         self.left = left
+#         self.right = right
+#         return self.binarySearch(left, right)
+#
+
+
+
 
 class Map:
     def __init__(self, cuts, ids):
@@ -61,14 +86,15 @@ class MapManager:
         return reference_frags[icut] + random.normal(0, self.sigma, 1)[0]
 
     def create_map(self):
-        ids, cuts = [], [0]
+        ids, cuts = [0], [0]
         # which was added by pc
         added = 0
         for icut in range(self.n):
-            cur_icut = icut
             icut += added
+            if icut >= self.n :
+                break
             # always add cut
-            cur_cut = self.get_frag(icut)
+            cur_cut = reference_frags[icut]
             # save last added cut, it need when we repeat by pc
 
             for r in random.binomial(1, 1 - self.pc, len(reference_frags)).tolist():
@@ -77,66 +103,49 @@ class MapManager:
                 added += 1
                 icut += 1
                 # save repeated id help to next calculations
-                cur_cut += self.get_frag(icut)
+                cur_cut += reference_frags[icut]
+                if icut >= self.n:
+                    break
 
-            cuts.append(cuts[-1] + cur_cut)
-            ids.append(icut)
+            cuts.append(cuts[-1] + cur_cut + random.normal(0, self.sigma, 1)[0])
+            ids.append(icut + 1)
 
-        ids.append(icut + added + 1)
+        # ids.append(icut + added + 1)
         return Map(cuts, ids)
 
     def create_maps(self):
         return self.create_map(), self.create_map()
 
 
+
 class Experiment:
-    def __init__(self, n, sigma, pc, gap_frags, gap_kb):
+    def __init__(self, n, sigma, pc, gap):
         self.sigma = sigma
-        self.gap_frags = gap_frags
-        self.gap_kb = gap_kb
+        self.gap = gap
         self.pc = pc
         self.n = n
+
+    @abc.abstractmethod
+    def run(self):
+        pass
+
+    @staticmethod
+    def get_filename():
+        pass
+
+class FragmentExperiment(Experiment):
 
     def get_pairs_in_frags(self, map1, map2):
         num_id2 = 0
         pairs = {}
-        for id1 in map1.ids[self.gap_frags:]:
-            # print(map2.ids[id2], id1)
+        for id1 in map1.ids[self.gap:]:
             if num_id2 not in map2.num_ids:
                 break
             pairs[map2.num_ids[num_id2]] = id1
             num_id2 += 1
         return pairs
 
-    def get_pairs_in_kb(self, map1, map2, pairs):
-        return [(map2.cuts[map2.id_nums[p2]], map1.cuts[map1.id_nums[p1]]) for p2, p1 in pairs]
-
-    def calc_distances(self, pairs):
-        return [math.fabs(x - y) / math.sqrt(2) for x, y in pairs]
-
-    def get_in_border(self, sigma_dist, border_dist):
-        reference = [1, 2, 3, 4, 5]
-        for dist_sigma, dist_point in zip(sigma_dist, border_dist):
-            ref_sum = 0
-            count_frags_ref = 0
-            for r in reference:
-                ref_sum += r
-                if dist_sigma >= ref_sum:
-                    count_frags_ref += 1
-                    continue
-                else:
-                    break
-            if dist_point < math.sqrt(count_frags_ref) * 3 * self.sigma:
-                return True
-        return False
-
-    def sigma_dist(self, pairs):
-        # Проекцируем на ось, находим расстояние и отображаем ось х или у => ((x+y) / 2, (x+y) / 2) => d = (x+y)/sqrt(2) => отображение на sqrt(2) / 2 => имеем (x + y)/2
-        return [(x + y) / 2 for x, y in pairs]
-
-    def test_border_frags(self, map1, map2):
-        # Build pairs of border points
-
+    def out_border(self, map1, map2):
         alignment_ids = sorted(list(set(map1.ids) & set(map2.ids)))
         pairs_cuts = self.get_pairs_in_frags(map1, map2)
 
@@ -145,64 +154,165 @@ class Experiment:
                 return True
         return False
 
-    def run_frags(self):
+    def run(self):
         mp = MapManager(self.n, self.sigma, self.pc)
-        return self.test_border_frags(mp.map1, mp.map2) and \
-               self.test_border_frags(mp.map2, mp.map1)
+        return self.out_border(mp.map1, mp.map2) and \
+               self.out_border(mp.map2, mp.map1)
 
-    def test_border_kb(self, map1, map2):
+    @staticmethod
+    def get_filename():
+        return "gap_in_frag.txt"
+
+
+class FragmentExperimentSize(Experiment):
+
+    def get_pairs_in_frags(self, map1, map2):
+        num_id2 = 0
+        pairs = {}
+        for id1 in map1.ids[self.gap:]:
+            if num_id2 not in map2.num_ids:
+                break
+            pairs[map2.num_ids[num_id2]] = id1
+            num_id2 += 1
+        return pairs
+
+
+    def invert(self, dictionary):
+        inverted_dict = {value: 0 for value in dictionary.values()}
+        for key in dictionary:
+            inverted_dict[dictionary[key]] = key
+        return inverted_dict
+
+    def count_in_region(self, map1, map2):
+        pairs_cuts_down = self.get_pairs_in_frags(map1, map2)
+        pairs_cuts_up = self.invert(self.get_pairs_in_frags(map2, map1))
+
+        count_in_region = 0
+        for cut in map2.ids:
+            up = pairs_cuts_up.get(cut, 0)
+            down = pairs_cuts_down.get(cut, map1.ids[-1])
+            count_in_region += map1.id_nums[down] - map1.id_nums[up] + 1
+            if down == map1.ids[-1] == up:
+                break
+
+        return count_in_region / (len(map1.cuts) * len(map2.cuts))
+
+
+    def run(self):
+        mp = MapManager(self.n, self.sigma, self.pc)
+        return self.count_in_region(mp.map2, mp.map1)
+
+    @staticmethod
+    def get_filename():
+        return "gap_in_frag_size.txt"
+
+
+class KilobaseExperimentSize(Experiment):
+    def __init__(self, n, sigma, pc, gap):
+        Experiment.__init__(self, n, sigma, pc, gap)
+        self.gap *= self.sigma
+
+    def count_in_region(self, map1, map2):
+        l = (len(map1.cuts) + len(map2.cuts)) / 2
+        count_in_region = 0
+        for cut1 in map1.cuts:
+            for cut2 in map2.cuts:
+                if -self.gap * math.sqrt(l) <= cut2 - cut1 <= self.gap * math.sqrt(l):
+                    count_in_region += 1
+        return count_in_region / (len(map1.cuts) * len(map2.cuts))
+
+
+    def run(self):
+        mp = MapManager(self.n, self.sigma, self.pc)
+        return self.count_in_region(mp.map1, mp.map2)
+
+    @staticmethod
+    def get_filename():
+        return "gap_in_kb_size.txt"
+
+
+
+class KilobaseExperiment(Experiment):
+    def __init__(self, n, sigma, pc, gap):
+        Experiment.__init__(self, n, sigma, pc, gap)
+        self.gap *= math.sqrt(self.n) * self.sigma
+
+    def out_border(self, map1, map2):
         alignment_ids = sorted(list(set(map1.ids) & set(map2.ids)))
 
+        cut1 = map1.cuts
+        cut2 = map2.cuts
 
-    def run_kb(self):
+        for i, id in enumerate(alignment_ids):
+            if cut2[map2.id_nums[id]] - cut1[map1.id_nums[id]] - self.gap > 0:
+                return True
+
+            if cut2[map2.id_nums[id]] - cut1[map1.id_nums[id]] + self.gap < 0:
+                return True
+
+        return False
+
+
+    def run(self):
         mp = MapManager(self.n, self.sigma, self.pc)
-        return self.test_border_kb(mp.map1, mp.map2) and \
-               self.test_border_kb(mp.map2, mp.map1)
+        return self.out_border(mp.map1, mp.map2)
 
-# print(exp.run())
-
-f = open('analyze_gap.txt', 'w')
-
-pool = ThreadPool()
-
-def calc_to_gap(gap_frags, gap_kb):
-    result = []
-    N = 2000
-    for isigma in range(1, 10):
-        sigma = isigma * 0.2
-        for ipc in range(0, 8):
-            pc = 0.6 + ipc * 0.05
-
-            exp = Experiment(25, sigma, pc, gap_frags)
-            errors = 0
-            for _ in range(N):
-                errors += exp.run_frags()
-
-            print("{} {} {} {}".format(sigma, pc, gap_frags, errors / N))
-            result.append("{} {} {} {}".format(sigma, pc, gap_frags, errors / N))
-    return result
+    @staticmethod
+    def get_filename():
+        return "gap_in_kb.txt"
 
 
-# N = 1000
-# for isigma in range(1, 10):
-#     sigma = isigma * 0.2
-#     for ipc in range(0, 8):
-#         pc = 0.6 + ipc * 0.05
-#         for gap in range(0, 5):
-#             exp = Experiment(25, sigma, pc, gap)
-#             errors = 0
-#             for _ in range(N):
-#                 errors += exp.run()
-#             print("{} {} {} {}".format(sigma, pc, gap, errors / N))
-#             print("{} {} {} {}".format(sigma, pc, gap, errors / N), file=f)
-# f.close()
+class Analyzer:
 
-#
-exp = Experiment(25, 1.8, 0.6, 0)
-map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
-map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
-print(exp.test_border_frags(map1, map2))
-print(exp.test_border_frags(map2, map1))
+    def __init__(self, experiment, map_size, N, gaps):
+        self.experimnet = experiment
+        self.N = N
+        self.map_size = map_size
+
+        pool = ThreadPool(4)
+        results = pool.map(self.analyze, gaps)
+        pool.close()
+        pool.join()
+        self.save_result(results)
+
+    def analyze(self, gap):
+        result = []
+        for isigma in range(1, 10):
+            sigma = isigma * 0.2
+            for ipc in range(0, 8):
+                pc = 0.6 + ipc * 0.05
+
+                exp = self.experimnet(self.map_size, sigma, pc, gap)
+                errors = 0
+                for _ in range(self.N):
+                    errors += exp.run()
+
+                print("{} {} {} {}".format(sigma, pc, gap, errors / self.N))
+                result.append("{} {} {} {}".format(sigma, pc, gap, errors / self.N))
+        return result
+
+    def save_result(self, results):
+        out = self.experimnet.get_filename()
+        f = open(out, 'w')
+        for output in results:
+            for r in output:
+                print(r, file=f)
+        f.close()
+
+
+
+# exp = Experiment(25, 1.8, 0.6, 1, 0.5)
+# map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
+# map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
+# print(exp.test_border_frags(map1, map2))
+# print(exp.test_border_frags(map2, map1))
+
+# exp = FragmentExperimentSize(1, 1, 1, 5)
+# # print(exp.run_kb())
+# map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
+# map2 = Map([0, 1, 3, 4, 5], [0, 1, 3, 4, 5])
+# print(exp.count_in_region(map1, map2))
+# print(exp.count_in_region(map2, map1))
 
 # ref_sum = 0
 # res = []
@@ -211,14 +321,10 @@ print(exp.test_border_frags(map2, map1))
 #     res.append(round(ref_sum, 3))
 # print(res)
 #
-# pool = ThreadPool(4)
-# gaps_frags = [1, 2, 3, 4]
-# results = pool.map(calc_to_gap, gaps_frags)
-#
-# pool.close()
-# pool.join()
-# f = open('analyze_gap.txt', 'w')
-# for output in results:
-#     for r in output:
-#         print(r, file=f)
-# f.close()
+
+if __name__ == "__main__":
+
+    # Analyzer(FragmentExperiment, 25, 100, [1, 2, 3, 4])
+    Analyzer(KilobaseExperiment, 25, 100, [1, 2, 3, 4])
+    # Analyzer(FragmentExperimentSize, 25, 150, [1, 2, 3, 4])
+    Analyzer(KilobaseExperimentSize, 25, 150, [1, 2, 3, 4])
