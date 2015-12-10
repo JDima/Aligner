@@ -46,14 +46,14 @@ reference_dist = [0, 23.077, 25.847, 27.353, 54.77, 58.012, 65.519, 72.029, 89.4
 #         if right < left:
 #             return self.NOT_FOUND
 #
-#         mid = (left + right) / 2
-#         task_result = self.task(mid)
-#         if task_result > 0:
-#             return self.binarySearch(arr, searchValue, mid + 1, right)
-#         elif task_result < 0:
-#             return self.binarySearch(arr, searchValue, left, mid - 1)
-#         else:
-#             return mid
+        # mid = (left + right) / 2
+        # task_result = self.task(mid)
+        # if task_result > 0:
+        #     return self.binarySearch(arr, searchValue, mid + 1, right)
+        # elif task_result < 0:
+        #     return self.binarySearch(arr, searchValue, left, mid - 1)
+        # else:
+        #     return mid
 #
 #     def search(self, left, right, ):
 #         self.left = left
@@ -119,11 +119,11 @@ class MapManager:
 
 
 class Experiment:
-    def __init__(self, n, sigma, pc, gap):
+    def __init__(self, map_size, sigma, pc, gap):
         self.sigma = sigma
         self.gap = gap
         self.pc = pc
-        self.n = n
+        self.map_size = map_size
 
     @abc.abstractmethod
     def run(self):
@@ -155,7 +155,7 @@ class FragmentExperiment(Experiment):
         return False
 
     def run(self):
-        mp = MapManager(self.n, self.sigma, self.pc)
+        mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.out_border(mp.map1, mp.map2) and \
                self.out_border(mp.map2, mp.map1)
 
@@ -199,7 +199,7 @@ class FragmentExperimentSize(Experiment):
 
 
     def run(self):
-        mp = MapManager(self.n, self.sigma, self.pc)
+        mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.count_in_region(mp.map2, mp.map1)
 
     @staticmethod
@@ -208,9 +208,9 @@ class FragmentExperimentSize(Experiment):
 
 
 class KilobaseExperimentSize(Experiment):
-    def __init__(self, n, sigma, pc, gap):
-        Experiment.__init__(self, n, sigma, pc, gap)
-        self.gap *= self.sigma
+    def __init__(self, map_size, sigma, pc, gap):
+        Experiment.__init__(self, map_size, sigma, pc, gap)
+        # self.gap *= self.sigma
 
     def count_in_region(self, map1, map2):
         l = (len(map1.cuts) + len(map2.cuts)) / 2
@@ -223,7 +223,7 @@ class KilobaseExperimentSize(Experiment):
 
 
     def run(self):
-        mp = MapManager(self.n, self.sigma, self.pc)
+        mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.count_in_region(mp.map1, mp.map2)
 
     @staticmethod
@@ -233,9 +233,9 @@ class KilobaseExperimentSize(Experiment):
 
 
 class KilobaseExperiment(Experiment):
-    def __init__(self, n, sigma, pc, gap):
-        Experiment.__init__(self, n, sigma, pc, gap)
-        self.gap *= math.sqrt(self.n) * self.sigma
+    def __init__(self, map_size, sigma, pc, gap):
+        Experiment.__init__(self, map_size, sigma, pc, gap)
+        # self.gap *= math.sqrt(self.map_size) * self.sigma
 
     def out_border(self, map1, map2):
         alignment_ids = sorted(list(set(map1.ids) & set(map2.ids)))
@@ -254,7 +254,7 @@ class KilobaseExperiment(Experiment):
 
 
     def run(self):
-        mp = MapManager(self.n, self.sigma, self.pc)
+        mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.out_border(mp.map1, mp.map2)
 
     @staticmethod
@@ -264,18 +264,19 @@ class KilobaseExperiment(Experiment):
 
 class Analyzer:
 
-    def __init__(self, experiment, map_size, N, gaps):
+    def __init__(self, experiment, map_size, N):
         self.experimnet = experiment
         self.N = N
         self.map_size = map_size
 
+    def analyze(self, gaps):
         pool = ThreadPool(4)
-        results = pool.map(self.analyze, gaps)
+        results = pool.map(self.analyze_by_gap, gaps)
         pool.close()
         pool.join()
-        self.save_result(results)
+        self.save_results(results)
 
-    def analyze(self, gap):
+    def analyze_by_gap(self, gap):
         result = []
         for isigma in range(1, 10):
             sigma = isigma * 0.2
@@ -283,15 +284,43 @@ class Analyzer:
                 pc = 0.6 + ipc * 0.05
 
                 exp = self.experimnet(self.map_size, sigma, pc, gap)
-                errors = 0
+                exp_result = 0
                 for _ in range(self.N):
-                    errors += exp.run()
+                    exp_result += exp.run()
 
-                print("{} {} {} {}".format(sigma, pc, gap, errors / self.N))
-                result.append("{} {} {} {}".format(sigma, pc, gap, errors / self.N))
+                print("{} {} {} {}".format(sigma, pc, gap, exp_result / self.N))
+                result.append("{} {} {} {}".format(sigma, pc, gap, exp_result / self.N))
+
         return result
 
-    def save_result(self, results):
+    def optimal_gap(self, err_exp, size_exp, left, right, error_rate):
+        result = []
+        for isigma in range(1, 10):
+            sigma = isigma * 0.2
+            for ipc in range(0, 8):
+                pc = 0.6 + ipc * 0.05
+
+                exp = self.experimnet(err_exp, self.map_size, sigma, pc, error_rate)
+                ## TODO SIGMA RIGHT
+                opt_gap = exp.run(self.N, left, right)
+
+                size_experimnet = size_exp(self.map_size, sigma, pc, opt_gap)
+                cell_count = 0
+                for _ in range(self.N):
+                    cell_count += size_experimnet.run()
+
+                print("{} {} {} {}".format(sigma, pc, round(opt_gap, 3), round(cell_count / self.N, 3)))
+                result.append("{} {} {} {}".format(sigma, pc, round(opt_gap, 3), round(cell_count / self.N, 3)))
+        self.save_result(result)
+
+    def save_result(self, result):
+        out = self.experimnet.get_filename()
+        f = open(out, 'w')
+        for r in result:
+            print(r, file=f)
+        f.close()
+
+    def save_results(self, results):
         out = self.experimnet.get_filename()
         f = open(out, 'w')
         for output in results:
@@ -300,6 +329,65 @@ class Analyzer:
         f.close()
 
 
+class OptimalGapKB(Experiment):
+
+    def __init__(self, experiment, map_size, sigma, pc, error_rate):
+        Experiment.__init__(self, map_size, sigma, pc, 0)
+        self.experiment = experiment
+        self.error_rate = error_rate
+
+    def binarySearch(self, left, right):
+        gap = (left + right) / 2
+
+        exp = self.experiment(self.map_size, self.sigma, self.pc, gap)
+        errors = 0
+        for _ in range(self.N):
+            errors += exp.run()
+        exp_result = errors / self.N
+
+        if exp_result > self.error_rate:
+             return self.binarySearch(gap, right)
+        elif exp_result < self.error_rate:
+            return self.binarySearch(left, gap)
+        else:
+            return gap
+
+    def run(self, N, left, right):
+        self.N = N
+        return self.binarySearch(left, right)
+
+    @staticmethod
+    def get_filename():
+        return "optimal_gap_in_kb.txt"
+
+
+class OptimalGapFrag(Experiment):
+
+    def __init__(self, experiment, map_size, sigma, pc, error_rate):
+        Experiment.__init__(self, map_size, sigma, pc, 0)
+        self.experiment = experiment
+        self.error_rate = error_rate
+
+    def binarySearch(self, left, right):
+
+        for gap in range(left, self.map_size):
+            exp = self.experiment(self.map_size, self.sigma, self.pc, gap)
+            errors = 0
+            for _ in range(self.N):
+                errors += exp.run()
+            exp_result = errors / self.N
+
+            if exp_result <= self.error_rate:
+                return gap
+
+
+    def run(self, N, left, right):
+        self.N = N
+        return self.binarySearch(left, right)
+
+    @staticmethod
+    def get_filename():
+        return "optimal_gap_in_frag.txt"
 
 # exp = Experiment(25, 1.8, 0.6, 1, 0.5)
 # map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
@@ -324,7 +412,21 @@ class Analyzer:
 
 if __name__ == "__main__":
 
-    # Analyzer(FragmentExperiment, 25, 100, [1, 2, 3, 4])
-    Analyzer(KilobaseExperiment, 25, 100, [1, 2, 3, 4])
-    # Analyzer(FragmentExperimentSize, 25, 150, [1, 2, 3, 4])
-    Analyzer(KilobaseExperimentSize, 25, 150, [1, 2, 3, 4])
+    # op = OptimalGap(KilobaseExperiment, 25, 0.6, 0.8, 0.01)
+    # op.run(1000, 1, 20 * 0.8)
+    # opa_kb = Analyzer(OptimalGapKB, 25, 100)
+    # opa_kb.optimal_gap(KilobaseExperiment, KilobaseExperimentSize, 1, 40, 0.1)
+    #
+    # opa_frag = Analyzer(OptimalGapFrag, 25, 100)
+    # opa_frag.optimal_gap(FragmentExperiment, FragmentExperimentSize, 1, 40, 0.1)
+
+    fe = Analyzer(FragmentExperiment, 25, 100)
+    fe.analyze([1, 2, 3, 4])
+    # ke = Analyzer(KilobaseExperiment, 25, 100)
+    # ke.analyze([1, 2, 3, 4])
+    fes = Analyzer(FragmentExperimentSize, 25, 150)
+    fes.analyze([1, 2, 3, 4])
+    # kes = Analyzer(KilobaseExperimentSize, 25, 150)
+    # kes.analyze([1, 2, 3, 4])
+
+
