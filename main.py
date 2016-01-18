@@ -1,5 +1,4 @@
 __author__ = 'JDima'
-import math
 import abc
 from numpy import random
 from multiprocessing.dummy import Pool as ThreadPool
@@ -37,33 +36,6 @@ reference_dist = [0, 23.077, 25.847, 27.353, 54.77, 58.012, 65.519, 72.029, 89.4
                   1644.738, 1657.042, 1688.253, 1694.901, 1754.764, 1778.158, 1778.55, 1781.999, 1785.18, 1821.612,
                   1824.307]
 
-# class BinarySearch:
-#
-#     def __init__(self, task):
-#         self.task = task
-#
-#     def binarySearch(self, left, right):
-#         if right < left:
-#             return self.NOT_FOUND
-#
-        # mid = (left + right) / 2
-        # task_result = self.task(mid)
-        # if task_result > 0:
-        #     return self.binarySearch(arr, searchValue, mid + 1, right)
-        # elif task_result < 0:
-        #     return self.binarySearch(arr, searchValue, left, mid - 1)
-        # else:
-        #     return mid
-#
-#     def search(self, left, right, ):
-#         self.left = left
-#         self.right = right
-#         return self.binarySearch(left, right)
-#
-
-
-
-
 class Map:
     def __init__(self, cuts, ids):
         self.cuts = cuts
@@ -91,7 +63,7 @@ class MapManager:
         added = 0
         for icut in range(self.n):
             icut += added
-            if icut >= self.n :
+            if icut >= self.n:
                 break
             # always add cut
             cur_cut = reference_frags[icut]
@@ -107,7 +79,7 @@ class MapManager:
                 if icut >= self.n:
                     break
 
-            cuts.append(cuts[-1] + cur_cut + random.normal(0, self.sigma, 1)[0])
+            cuts.append(cuts[-1] + cur_cut + random.normal(0, self.sigma + 0.00000000000001, 1)[0])
             ids.append(icut + 1)
 
         # ids.append(icut + added + 1)
@@ -115,7 +87,6 @@ class MapManager:
 
     def create_maps(self):
         return self.create_map(), self.create_map()
-
 
 
 class Experiment:
@@ -133,8 +104,8 @@ class Experiment:
     def get_filename():
         pass
 
-class FragmentExperiment(Experiment):
 
+class FragmentExperiment(Experiment):
     def get_pairs_in_frags(self, map1, map2):
         num_id2 = 0
         pairs = {}
@@ -150,13 +121,13 @@ class FragmentExperiment(Experiment):
         pairs_cuts = self.get_pairs_in_frags(map1, map2)
 
         for align_id in alignment_ids:
-            if pairs_cuts.get(align_id, 10**10) < align_id:
+            if pairs_cuts.get(align_id, 10 ** 10) < align_id:
                 return True
         return False
 
     def run(self):
         mp = MapManager(self.map_size, self.sigma, self.pc)
-        return self.out_border(mp.map1, mp.map2) and \
+        return self.out_border(mp.map1, mp.map2) or \
                self.out_border(mp.map2, mp.map1)
 
     @staticmethod
@@ -165,7 +136,6 @@ class FragmentExperiment(Experiment):
 
 
 class FragmentExperimentSize(Experiment):
-
     def get_pairs_in_frags(self, map1, map2):
         num_id2 = 0
         pairs = {}
@@ -175,7 +145,6 @@ class FragmentExperimentSize(Experiment):
             pairs[map2.num_ids[num_id2]] = id1
             num_id2 += 1
         return pairs
-
 
     def invert(self, dictionary):
         inverted_dict = {value: 0 for value in dictionary.values()}
@@ -197,7 +166,6 @@ class FragmentExperimentSize(Experiment):
 
         return count_in_region / (len(map1.cuts) * len(map2.cuts))
 
-
     def run(self):
         mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.count_in_region(mp.map2, mp.map1)
@@ -217,10 +185,9 @@ class KilobaseExperimentSize(Experiment):
         count_in_region = 0
         for cut1 in map1.cuts:
             for cut2 in map2.cuts:
-                if -self.gap * math.sqrt(l) <= cut2 - cut1 <= self.gap * math.sqrt(l):
+                if -self.gap <= cut2 - cut1 <= self.gap:
                     count_in_region += 1
         return count_in_region / (len(map1.cuts) * len(map2.cuts))
-
 
     def run(self):
         mp = MapManager(self.map_size, self.sigma, self.pc)
@@ -229,7 +196,6 @@ class KilobaseExperimentSize(Experiment):
     @staticmethod
     def get_filename():
         return "gap_in_kb_size.txt"
-
 
 
 class KilobaseExperiment(Experiment):
@@ -252,7 +218,6 @@ class KilobaseExperiment(Experiment):
 
         return False
 
-
     def run(self):
         mp = MapManager(self.map_size, self.sigma, self.pc)
         return self.out_border(mp.map1, mp.map2)
@@ -263,7 +228,6 @@ class KilobaseExperiment(Experiment):
 
 
 class Analyzer:
-
     def __init__(self, experiment, map_size, N):
         self.experimnet = experiment
         self.N = N
@@ -295,9 +259,9 @@ class Analyzer:
 
     def optimal_gap(self, err_exp, size_exp, left, right, error_rate):
         result = []
-        for isigma in range(1, 10):
-            sigma = isigma * 0.2
-            for ipc in range(0, 8):
+        for isigma in range(0, 5):
+            sigma = isigma * 0.5
+            for ipc in range(0, 9):
                 pc = 0.6 + ipc * 0.05
 
                 exp = self.experimnet(err_exp, self.map_size, sigma, pc, error_rate)
@@ -330,7 +294,6 @@ class Analyzer:
 
 
 class OptimalGapKB(Experiment):
-
     def __init__(self, experiment, map_size, sigma, pc, error_rate):
         Experiment.__init__(self, map_size, sigma, pc, 0)
         self.experiment = experiment
@@ -339,6 +302,9 @@ class OptimalGapKB(Experiment):
     def binarySearch(self, left, right):
         gap = (left + right) / 2
 
+        if left == right:
+            return gap
+
         exp = self.experiment(self.map_size, self.sigma, self.pc, gap)
         errors = 0
         for _ in range(self.N):
@@ -346,7 +312,7 @@ class OptimalGapKB(Experiment):
         exp_result = errors / self.N
 
         if exp_result > self.error_rate:
-             return self.binarySearch(gap, right)
+            return self.binarySearch(gap, right)
         elif exp_result < self.error_rate:
             return self.binarySearch(left, gap)
         else:
@@ -362,7 +328,6 @@ class OptimalGapKB(Experiment):
 
 
 class OptimalGapFrag(Experiment):
-
     def __init__(self, experiment, map_size, sigma, pc, error_rate):
         Experiment.__init__(self, map_size, sigma, pc, 0)
         self.experiment = experiment
@@ -380,7 +345,6 @@ class OptimalGapFrag(Experiment):
             if exp_result <= self.error_rate:
                 return gap
 
-
     def run(self, N, left, right):
         self.N = N
         return self.binarySearch(left, right)
@@ -388,6 +352,7 @@ class OptimalGapFrag(Experiment):
     @staticmethod
     def get_filename():
         return "optimal_gap_in_frag.txt"
+
 
 # exp = Experiment(25, 1.8, 0.6, 1, 0.5)
 # map1 = Map([0, 1, 2, 5], [0, 1, 2, 5])
@@ -411,22 +376,25 @@ class OptimalGapFrag(Experiment):
 #
 
 if __name__ == "__main__":
-
     # op = OptimalGap(KilobaseExperiment, 25, 0.6, 0.8, 0.01)
     # op.run(1000, 1, 20 * 0.8)
-    # opa_kb = Analyzer(OptimalGapKB, 25, 100)
-    # opa_kb.optimal_gap(KilobaseExperiment, KilobaseExperimentSize, 1, 40, 0.1)
-    #
-    # opa_frag = Analyzer(OptimalGapFrag, 25, 100)
-    # opa_frag.optimal_gap(FragmentExperiment, FragmentExperimentSize, 1, 40, 0.1)
+    count_cut = 25
+    repeats = 400
+    error_rate = 0.01
+    left_border, right_border = 1, 100
+    opa_kb = Analyzer(OptimalGapKB, count_cut, repeats)
+    opa_kb.optimal_gap(KilobaseExperiment, KilobaseExperimentSize,
+                       left_border, right_border, error_rate)
 
-    fe = Analyzer(FragmentExperiment, 25, 100)
-    fe.analyze([1, 2, 3, 4])
+    opa_frag = Analyzer(OptimalGapFrag, count_cut, repeats)
+    opa_frag.optimal_gap(FragmentExperiment, FragmentExperimentSize,
+                         left_border, right_border, error_rate)
+
+    # fe = Analyzer(FragmentExperiment, 25, 100)
+    # fe.analyze([1, 2, 3, 4])
     # ke = Analyzer(KilobaseExperiment, 25, 100)
     # ke.analyze([1, 2, 3, 4])
-    fes = Analyzer(FragmentExperimentSize, 25, 150)
-    fes.analyze([1, 2, 3, 4])
+    # fes = Analyzer(FragmentExperimentSize, 25, 150)
+    # fes.analyze([1, 2, 3, 4])
     # kes = Analyzer(KilobaseExperimentSize, 25, 150)
     # kes.analyze([1, 2, 3, 4])
-
-
